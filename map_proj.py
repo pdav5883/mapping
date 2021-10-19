@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.optimize import newton
 import matplotlib.pyplot as plt
 
 DEG2RAD = np.pi / 180
@@ -249,4 +250,40 @@ def transform_sinusoidal_interrupted(coords, interrupts,
         return np.concatenate([coords_sin_interrupted, interrupt_borders], axis=0)
     else:
         return coords_sin_interrupted
+
+
+def transform_mollweide(coords, center_lon, center_lat, heading, include_borders=True):
+    coords_spherical = transform_spherical(coords, center_lon, center_lat, heading)
+    
+    if include_borders:
+        n = 100
+        border_lat = np.linspace(-np.pi/2, np.pi/2, n)
+        coords_border = np.zeros(shape=(2*n + 2, 2))
+        coords_border[0,:] = np.nan
+        coords_border[1:n+1,0] = -np.pi
+        coords_border[1:n+1,1] = border_lat
+        coords_border[n+1,:] = np.nan
+        coords_border[n+2:, 0] = np.pi
+        coords_border[n+2:, 1] = border_lat
+        
+        coords_spherical = np.concatenate([coords_spherical, coords_border], axis=0)
+        
+    def mollweide_fun(theta, lat):
+        return 2 * theta + np.sin(2 * theta) - np.pi * np.sin(lat)
+    def mollweide_dot(theta, lat):
+        return 2 + 2 * np.cos(2 * theta)
+        
+    # newton will not like working on nans
+    isnan = np.isnan(coords_spherical[:,0])
+    
+    fun = lambda t: mollweide_fun(t, coords_spherical[~isnan, 1])
+    prime = lambda t: mollweide_dot(t, coords_spherical[~isnan, 1])
+    theta = newton(fun, coords_spherical[~isnan,1], prime)
+
+    coords_mollweide = np.zeros(shape=coords_spherical.shape)
+    coords_mollweide[isnan,:] = np.nan
+    coords_mollweide[~isnan,0] = 2 * np.sqrt(2) / np.pi * coords_spherical[~isnan,0] * np.cos(theta)
+    coords_mollweide[~isnan,1] = np.sqrt(2) * np.sin(theta)
+    
+    return coords_mollweide
 
