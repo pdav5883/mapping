@@ -287,3 +287,38 @@ def transform_mollweide(coords, center_lon, center_lat, heading, include_borders
     
     return coords_mollweide
 
+
+def transform_gnomonic(coords, truncate_lat=np.pi/4, tangent_lon=0, tangent_lat=np.pi/2, heading=0, include_borders=True):
+    # truncate_lat: how many degrees of latitude away from tangent point to show
+    # transformation points the +z axis (lat=90) at tangent point
+    ez = np.array([np.cos(tangent_lon)*np.cos(tangent_lat), np.sin(tangent_lon)*np.cos(tangent_lat), np.sin(tangent_lat)])
+
+    if tangent_lat == np.pi/2:
+        ey = np.array([0,1,0])
+    else:
+        ey = np.array([0,0,1])
+
+    ey = ey - np.dot(ey, ez) * ez
+    ey = ey / np.linalg.norm(ey)
+
+    ex = np.cross(ey, ez)
+
+    rot_heading = np.array([[np.cos(heading), -np.sin(heading), 0],
+                            [np.sin(heading), np.cos(heading), 0],
+                            [0, 0, 1]])
+    rotmat = np.dot(rot_heading, np.stack([ex, ey, ez], axis=0))
+    coords_spherical = cartesian_to_spherical(np.dot(coords, rotmat.transpose()))
+
+    # polar coords are theta, r
+    coords_gn_polar = np.zeros(shape=coords_spherical.shape)
+    coords_gn_polar[:,0] = coords_spherical[:,0]
+    coords_gn_polar[:,1] = np.tan(np.pi/2 - coords_spherical[:,1])
+
+    ind_truncate = coords_spherical[:,1] < np.pi/2 - truncate_lat
+    coords_gn_polar[ind_truncate,:] = np.nan
+
+    x = coords_gn_polar[:,1] * np.cos(coords_gn_polar[:,0])
+    y = coords_gn_polar[:,1] * np.sin(coords_gn_polar[:,0])
+    
+    return np.stack([x, y], axis=1)
+
