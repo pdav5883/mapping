@@ -383,3 +383,63 @@ def transform_perspective_near_side(coords, center_lat, center_lon, alt, heading
         coords_proj = np.concatenate([coords_proj, np.array([[np.nan, np.nan]]), coords_limb], axis=0)
         
     return coords_proj
+
+
+def transform_perspective_far_side(coords, center_lat, center_lon, alt, heading=0, truncate_ang=0.37*np.pi, include_limb=True):
+    # altitude is km above ground on far side of earth (opposite center_lat/lon point)
+    # truncate angle is half angle
+    # alt=0 is stereographic
+    r_center_norm = np.array([np.cos(center_lon)*np.cos(center_lat),
+                              np.sin(center_lon)*np.cos(center_lat),
+                              np.sin(center_lat)])
+    
+    # transform from ecef to p-frame, which points towards center point with heading ccw from north/180lon
+    p1 = r_center_norm
+
+    if p1[0] == 0 and p1[1] == 0:
+        p2 = np.array([0, -1, 0])
+    else:
+        p2 = np.array([0, 1, 0])
+
+    p2 = p2 - np.dot(p1, p2) * p1
+    p2 = p2 / np.linalg.norm(p2)
+
+    p3 = np.cross(p1, p2)
+
+    heading_rot = np.array([[1, 0, 0],
+                            [0, np.cos(heading), -np.sin(heading)],
+                            [0, np.sin(heading), np.cos(heading)]])
+    
+    rotmat_ecef_to_p = np.dot(heading_rot, np.stack([p1, p2, p3]))
+    
+    # r_opp is the projection origin point, then rotate to p
+    r_opp_norm = -r_center_norm
+    r_opp = (RE + alt) * r_opp_norm
+    
+    coords_p = np.dot(rotmat_ecef_to_p, (coords*RE - r_opp.reshape(1,3)).transpose()).transpose()
+
+    # remove points that are below the horizon on the same side as r_opp
+    # d is the distance along the p1 axis from r_opp to the horizon point
+    d = alt + RE * (1 - RE / (RE + alt))
+    coords_p[coords_p[:,0] < d, :] = np.nan
+    
+    # normalize all points to allow truncation
+    coords_p = coords_p / np.linalg.norm(coords_p, axis=1, keepdims=True)
+    
+    coords_p[coords_p[:,0] < np.cos(truncate_ang), :] = np.nan
+    
+    # scale each point to 1 on p1 axis
+    coords_p = coords_p / coords_p[:,0].reshape(-1,1)
+    
+    # project by taking only last two coords
+    coords_proj = coords_p[:,1:]
+    
+    if include_limb:
+        view_ang = np.arcsin(RE/(RE+alt))
+        limb_ang = min(view_ang, truncate_ang)
+        limb_dist = np.tan(limb_ang)
+        t = np.linspace(0,2*np.pi,100)
+        coords_limb = limb_dist * np.stack([np.cos(t), np.sin(t)], axis=1)
+        coords_proj = np.concatenate([coords_proj, np.array([[np.nan, np.nan]]), coords_limb], axis=0)
+    
+    return coords_proj
