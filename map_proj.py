@@ -4,6 +4,8 @@ import matplotlib.pyplot as plt
 
 DEG2RAD = np.pi / 180
 RAD2DEG = 180 / np.pi
+M2KM = 1000
+RE = 6378 * M2KM
 
 def calc_line_breaks(points, dmax=0.5):
     # where the line rolls over the break in x coord or y coord
@@ -322,3 +324,62 @@ def transform_gnomonic(coords, truncate_lat=np.pi/4, tangent_lon=0, tangent_lat=
     
     return np.stack([x, y], axis=1)
 
+
+def transform_perspective_near_side(coords, center_lat, center_lon, alt, heading=0, include_limb=True):
+    # altitude in kilometers, angles in radians
+    # set altitude to np.inf for orthographic projection
+    
+    r_norm = np.array([np.cos(center_lon)*np.cos(center_lat),
+                       np.sin(center_lon)*np.cos(center_lat),
+                       np.sin(center_lat)])
+
+    if alt == np.inf:
+        r = 0 * r_norm
+    else:
+        r = (alt + RE) * r_norm
+
+    # build frame with r as aligned, north as constrained, then rotate by heading
+    p1 = r_norm
+
+    if p1[0] == 0 and p1[1] == 0:
+        p2 = np.array([0, -1, 0])
+    else:
+        p2 = np.array([1, 0, 0])
+
+    p2 = p2 - np.dot(p1, p2) * p1
+    p2 = p2 / np.linalg.norm(p2)
+
+    p3 = np.cross(p1, p2)
+
+    heading_rot = np.array([[1, 0, 0],
+                            [0, np.cos(heading), np.sin(heading)],
+                            [0, -np.sin(heading), np.cos(heading)]])
+    
+    rotmat_ecef_to_p = np.dot(heading_rot, np.stack([p1, p2, p3]))
+
+    # put all points in p frame, relative to r
+    coords_p = np.dot(rotmat_ecef_to_p, (coords*RE - r.reshape(1,3)).transpose()).transpose()
+
+    # use only the second and third coordinates for projection
+    coords_proj = coords_p[:,1:]
+
+    # don't plot anything that is further away than earth limb
+    if alt == np.inf:
+        coords_proj[coords_p[:,0] < 0,:] = np.nan
+    else:
+        limbdist = np.sqrt((alt+RE)**2 - RE**2)
+        coords_p_dist = np.linalg.norm(coords_p, axis=1)
+        coords_proj[coords_p_dist > limbdist,:] = np.nan
+
+    # add the limb
+    if include_limb:
+        if alt == np.inf:
+            limbplot = RE
+        else:
+            limbplot = RE / (alt+RE) * limbdist
+            
+        t = np.linspace(0,2*np.pi,100)
+        coords_limb = np.stack([limbplot*np.cos(t), limbplot*np.sin(t)], axis=1)
+        coords_proj = np.concatenate([coords_proj, np.array([[np.nan, np.nan]]), coords_limb], axis=0)
+        
+    return coords_proj
