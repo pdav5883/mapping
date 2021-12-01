@@ -344,7 +344,7 @@ def transform_perspective_near_side(coords, center_lat, center_lon, alt, heading
     if p1[0] == 0 and p1[1] == 0:
         p2 = np.array([0, -1, 0])
     else:
-        p2 = np.array([1, 0, 0])
+        p2 = np.array([-1, 0, 0])
 
     p2 = p2 - np.dot(p1, p2) * p1
     p2 = p2 / np.linalg.norm(p2)
@@ -360,29 +360,34 @@ def transform_perspective_near_side(coords, center_lat, center_lon, alt, heading
     # put all points in p frame, relative to r
     coords_p = np.dot(rotmat_ecef_to_p, (coords*RE - r.reshape(1,3)).transpose()).transpose()
 
-    # use only the second and third coordinates for projection
-    coords_proj = coords_p[:,1:]
-
     # don't plot anything that is further away than earth limb
     if alt == np.inf:
-        coords_proj[coords_p[:,0] < 0,:] = np.nan
+        coords_p[coords_p[:,0] < 0,:] = np.nan
     else:
         limbdist = np.sqrt((alt+RE)**2 - RE**2)
         coords_p_dist = np.linalg.norm(coords_p, axis=1)
-        coords_proj[coords_p_dist > limbdist,:] = np.nan
+        coords_p[coords_p_dist > limbdist,:] = np.nan
 
     # add the limb
     if include_limb:
         if alt == np.inf:
-            limbplot = RE
+            limbdist = RE
+            limbang = np.pi/2
         else:
-            limbplot = RE / (alt+RE) * limbdist
+            limbang = np.arcsin(RE/(RE+alt))
             
         t = np.linspace(0,2*np.pi,100)
-        coords_limb = np.stack([limbplot*np.cos(t), limbplot*np.sin(t)], axis=1)
-        coords_proj = np.concatenate([coords_proj, np.array([[np.nan, np.nan]]), coords_limb], axis=0)
+        coords_limb = np.stack([limbdist * np.cos(limbang) * np.ones(shape=t.shape),
+                                limbdist * np.sin(limbang) * np.cos(t),
+                                limbdist * np.sin(limbang) * np.sin(t)], axis=1)
+        coords_p = np.concatenate([coords_p, np.array([[np.nan, np.nan, np.nan]]), coords_limb], axis=0)
         
-    return coords_proj
+    # scale p1 coordinate to nadir tangent plane with earth (forgot this earlier)
+    if alt != np.inf:
+        coords_p = coords_p / coords_p[:,0].reshape(-1,1) * alt
+    
+    # project by taking last two coordinates
+    return coords_p[:,1:]
 
 
 def transform_perspective_far_side(coords, center_lat, center_lon, alt, heading=0, truncate_ang=0.37*np.pi, include_limb=True):
