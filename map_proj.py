@@ -450,3 +450,20 @@ def transform_perspective_far_side(coords, center_lat, center_lon, alt, heading=
         coords_proj = np.concatenate([coords_proj, np.array([[np.nan, np.nan]]), coords_limb], axis=0)
     
     return coords_proj
+
+
+def transform_azimuthal_equidistant(coords, center_lon=0, center_lat=np.pi/2, heading=0, include_border=True):
+    # rotate such that z axis points at center_lat/lon and heading=0 is North/0lon
+    coords_rotated = np.dot(coords, rotmat_euler323(center_lon, center_lat - np.pi/2, -heading).transpose())
+    coords_spherical = cartesian_to_spherical(coords_rotated)
+    
+    rho = RE * (np.pi/2 - coords_spherical[:,1])
+    coords_azeq = np.stack([rho * np.sin(coords_spherical[:,0]), -rho * np.cos(coords_spherical[:,0])], axis=1)
+    
+    if include_border:
+        borderdist = np.pi * RE
+        t = np.linspace(0,2*np.pi,100)
+        coords_border = np.stack([borderdist * np.cos(t), borderdist * np.sin(t)], axis=1)
+        coords_azeq = np.concatenate([coords_azeq, np.array([[np.nan, np.nan]]), coords_border], axis=0)
+    
+    return coords_azeq
