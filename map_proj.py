@@ -343,6 +343,8 @@ def transform_perspective_near_side(coords, center_lat, center_lon, alt, heading
 
     if p1[0] == 0 and p1[1] == 0:
         p2 = np.array([0, -1, 0])
+    elif alt == np.inf:
+        p2 = np.array([1, 0, 0])
     else:
         p2 = np.array([-1, 0, 0])
 
