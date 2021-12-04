@@ -325,7 +325,7 @@ def transform_gnomonic(coords, truncate_lat=np.pi/4, tangent_lon=0, tangent_lat=
     return np.stack([x, y], axis=1)
 
 
-def transform_perspective_near_side(coords, center_lat, center_lon, alt, heading=0, include_limb=True):
+def transform_perspective_near_side(coords, center_lon, center_lat, alt, heading=0, include_limb=True):
     # altitude in kilometers, angles in radians
     # set altitude to np.inf for orthographic projection
     
@@ -392,7 +392,7 @@ def transform_perspective_near_side(coords, center_lat, center_lon, alt, heading
     return coords_p[:,1:]
 
 
-def transform_perspective_far_side(coords, center_lat, center_lon, alt, heading=0, truncate_ang=0.37*np.pi, include_limb=True):
+def transform_perspective_far_side(coords, center_lon, center_lat, alt, heading=0, truncate_ang=0.37*np.pi, include_limb=True):
     # altitude is km above ground on far side of earth (opposite center_lat/lon point)
     # truncate angle is half angle
     # alt=0 is stereographic
